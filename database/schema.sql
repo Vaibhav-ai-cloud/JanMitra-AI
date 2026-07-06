@@ -1,0 +1,2 @@
+-- Database schema for JanMitra AI
+-- Add tables and schema definitions here.
