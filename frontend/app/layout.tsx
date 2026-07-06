@@ -1,9 +1,16 @@
-export const metadata = {
-  title: 'JanMitra AI',
-  description: 'Citizen engagement and public service platform',
+import type { Metadata } from "next";
+import "../styles/globals.css";
+
+export const metadata: Metadata = {
+  title: "JanMitra AI",
+  description: "AI Powered Constituency Intelligence Platform",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
       <body>{children}</body>
