@@ -1,0 +1,13 @@
+export { default as Hero } from "./Hero";
+export { default as TrustedBy } from "./TrustedBy";
+export { default as Features } from "./Features";
+export { default as GovernmentServices } from "./GovernmentServices";
+export { default as AIShowcase } from "./AIShowcase";
+export { default as Stats } from "./Stats";
+export { default as HowItWorks } from "./HowItWorks";
+export { default as Benefits } from "./Benefits";
+export { default as Testimonials } from "./Testimonials";
+export { default as FAQ } from "./FAQ";
+export { default as CallToAction } from "./CallToAction";
+export { default as Footer } from "./Footer";
+export { default as BackgroundEffects } from "./BackgroundEffects";
