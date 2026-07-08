@@ -1,0 +1,2 @@
+-- Seed data for JanMitra AI
+-- Add initial rows here.

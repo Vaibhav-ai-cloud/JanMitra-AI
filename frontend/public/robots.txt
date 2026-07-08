@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+
+# Disallow authenticated dashboard routes from public indexing
+Disallow: /admin/
+Disallow: /citizen/
+Disallow: /mp/
+Disallow: /api/
+
+# Allow public landing + auth pages
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /forgot-password
+Allow: /privacy
+Allow: /terms
+
+Sitemap: https://janmitra.ai/sitemap.xml

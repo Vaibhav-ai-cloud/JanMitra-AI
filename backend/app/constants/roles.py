@@ -1,0 +1,5 @@
+CITIZEN = "citizen"
+MP = "mp"
+ADMIN = "admin"
+
+ALLOWED_REGISTRATION_ROLES = [CITIZEN, MP]
