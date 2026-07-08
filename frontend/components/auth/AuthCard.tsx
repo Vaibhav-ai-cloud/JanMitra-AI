@@ -1,10 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { cn } from "../../utils/auth";
 
 interface AuthCardProps {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   /** Delay the entrance animation slightly when stacked */
   delay?: number;

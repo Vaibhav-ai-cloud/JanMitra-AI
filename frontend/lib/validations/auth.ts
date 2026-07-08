@@ -26,6 +26,11 @@ export const loginSchema = z.object({
   identifier: z.string().min(1, "Email or phone number is required"),
   password: z.string().min(1, "Password is required"),
   rememberMe: z.boolean(),
+  // Role is used on the login page to pick the correct backend endpoint.
+  // citizen → POST /auth/login
+  // mp      → POST /auth/mp/login
+  // admin   → POST /auth/admin/login
+  loginRole: z.enum(["citizen", "mp", "admin"]).default("citizen"),
 });
 
 export type LoginSchema = z.infer<typeof loginSchema>;
@@ -43,16 +48,47 @@ export const registerSchema = z
     phone: phoneSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Please confirm your password"),
-    role: z.enum(["citizen", "mp", "admin"]),
+    // Only citizen and mp can register — admin is blocked at the backend too
+    role: z.enum(["citizen", "mp"]),
     acceptTerms: z
       .boolean()
       .refine((v) => v === true, {
         message: "You must accept the Terms & Privacy Policy to continue",
       }),
+
+    // ── MP-only fields (optional strings — validated conditionally below) ────
+    constituency: z.string().optional(),
+    district:     z.string().optional(),
+    state:        z.string().optional(),
+    party:        z.string().optional(),
+    mpId:         z.string().optional(),
   })
+  // Password match
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
+  })
+  // MP field validation — required only when role === "mp"
+  .superRefine((data, ctx) => {
+    if (data.role !== "mp") return;
+
+    const required: { field: keyof typeof data; label: string }[] = [
+      { field: "constituency", label: "Constituency" },
+      { field: "district",     label: "District" },
+      { field: "state",        label: "State" },
+      { field: "party",        label: "Political Party" },
+    ];
+
+    for (const { field, label } of required) {
+      const val = data[field];
+      if (!val || (typeof val === "string" && val.trim() === "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${label} is required for MP registration`,
+          path: [field],
+        });
+      }
+    }
   });
 
 export type RegisterSchema = z.infer<typeof registerSchema>;

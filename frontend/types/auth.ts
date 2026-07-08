@@ -14,7 +14,7 @@ export interface RegisterFormData {
   phone: string;
   password: string;
   confirmPassword: string;
-  role: UserRole;
+  role: "citizen" | "mp";
   acceptTerms: boolean;
 }
 
@@ -56,4 +56,4 @@ export interface PasswordStrength {
   color: string;
 }
 
-export type SocialProvider = "google" | "github" | "aadhaar";
+export type SocialProvider = "google" | "github";

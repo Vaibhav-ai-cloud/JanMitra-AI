@@ -1,14 +1,14 @@
 "use client";
 
+import type { ReactNode, ButtonHTMLAttributes } from "react";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { cn } from "../../utils/auth";
 
-interface LoadingButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface LoadingButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   loadingText?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   variant?: "primary" | "outline" | "danger";
   size?: "sm" | "md" | "lg";
 }
@@ -36,39 +36,43 @@ export default function LoadingButton({
   size = "md",
   className,
   disabled,
-  type,
-  onClick,
+  type = "submit",
   ...rest
 }: LoadingButtonProps) {
   const isDisabled = disabled || isLoading;
 
   return (
-    <motion.button
-      type={type ?? "submit"}
-      disabled={isDisabled}
-      onClick={onClick}
+    <motion.div
       whileHover={{ scale: isDisabled ? 1 : 1.01 }}
       whileTap={{ scale: isDisabled ? 1 : 0.98 }}
-      aria-busy={isLoading}
-      aria-disabled={isDisabled}
-      className={cn(
-        "relative inline-flex w-full items-center justify-center gap-2 rounded-xl font-semibold",
-        "transition-all duration-300 outline-none",
-        "focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-        variantMap[variant],
-        sizeMap[size],
-        className
-      )}
+      className="w-full"
     >
-      {isLoading ? (
-        <>
-          <Loader2 size={16} className="animate-spin" aria-hidden />
-          <span>{loadingText}</span>
-        </>
-      ) : (
-        children
-      )}
-    </motion.button>
+      <button
+        // eslint-disable-next-line react/button-has-type
+        type={type}
+        disabled={isDisabled}
+        aria-busy={isLoading}
+        aria-disabled={isDisabled}
+        className={cn(
+          "relative inline-flex w-full items-center justify-center gap-2 rounded-xl font-semibold",
+          "transition-all duration-300 outline-none",
+          "focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+          variantMap[variant],
+          sizeMap[size],
+          className
+        )}
+        {...rest}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 size={16} className="animate-spin" aria-hidden />
+            <span>{loadingText}</span>
+          </>
+        ) : (
+          children
+        )}
+      </button>
+    </motion.div>
   );
 }

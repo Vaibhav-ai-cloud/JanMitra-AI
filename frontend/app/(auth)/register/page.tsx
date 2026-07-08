@@ -1,10 +1,13 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { motion } from "framer-motion";
-import { Mail, Phone, User, ArrowRight, Shield } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Mail, Phone, User, ArrowRight, Shield,
+  MapPin, Building2, Landmark, PartyPopper, BadgeCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -23,20 +26,25 @@ import {
   registerSchema,
   type RegisterSchema,
 } from "../../../lib/validations/auth";
-import type { UserRole } from "../../../types/auth";
 import { cn } from "../../../utils/auth";
-import { authRegister } from "../../../lib/authStore";
+import { authRegisterCitizen, authRegisterMP } from "../../../lib/authStore";
 
-const roleOptions: { value: UserRole; label: string; icon: string; desc: string }[] = [
-  { value: "citizen", label: "Citizen",     icon: "🏠",  desc: "Access schemes & services" },
-  { value: "mp",      label: "Elected Rep.", icon: "🏛️", desc: "MP / MLA dashboard" },
-  { value: "admin",   label: "Admin",       icon: "🛡️", desc: "Platform administration" },
+const GOOGLE_OAUTH_URL = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_URL ?? "";
+
+const roleOptions: {
+  value: "citizen" | "mp";
+  label: string;
+  icon: string;
+  desc: string;
+}[] = [
+  { value: "citizen", label: "Citizen",       icon: "🏠", desc: "Access schemes & services" },
+  { value: "mp",      label: "Elected Rep.",  icon: "🏛️", desc: "MP / MLA dashboard" },
 ];
 
 export default function RegisterPage() {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg]   = useState<string | null>(null);
+  const [successMsg,  setSuccessMsg]  = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -46,45 +54,70 @@ export default function RegisterPage() {
     setValue,
     formState: { errors },
   } = useForm<RegisterSchema>({
-    resolver: zodResolver(registerSchema) as Parameters<typeof useForm<RegisterSchema>>[0]["resolver"],
+    resolver: zodResolver(registerSchema),
     defaultValues: {
-      role: "citizen",
-      acceptTerms: false,
-      fullName: "",
-      email: "",
-      phone: "",
-      password: "",
+      role:            "citizen",
+      acceptTerms:     false,
+      fullName:        "",
+      email:           "",
+      phone:           "",
+      password:        "",
       confirmPassword: "",
+      constituency:    "",
+      district:        "",
+      state:           "",
+      party:           "",
+      mpId:            "",
     },
   });
 
   const password     = watch("password") ?? "";
   const selectedRole = watch("role");
+  const isMP         = selectedRole === "mp";
 
   const onSubmit = async (data: RegisterSchema) => {
     setServerError(null);
     setSuccessMsg(null);
     setIsSubmitting(true);
+
     try {
-      await authRegister({
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
-        password: data.password,
-        role: data.role,
-      });
-      setSuccessMsg("Account created! Redirecting to sign in…");
-      setTimeout(() => router.push("/login"), 1500);
+      if (data.role === "mp") {
+        await authRegisterMP({
+          fullName:     data.fullName,
+          email:        data.email,
+          phone:        data.phone,
+          password:     data.password,
+          constituency: data.constituency ?? "",
+          district:     data.district ?? "",
+          state:        data.state ?? "",
+          party:        data.party ?? "",
+          mpId:         data.mpId || undefined,
+        });
+        setSuccessMsg(
+          "Registration submitted successfully. Your account is pending admin approval."
+        );
+        setTimeout(() => router.push("/login"), 2500);
+      } else {
+        await authRegisterCitizen({
+          fullName: data.fullName,
+          email:    data.email,
+          phone:    data.phone,
+          password: data.password,
+        });
+        setSuccessMsg("Account created! Redirecting to sign in…");
+        setTimeout(() => router.push("/login"), 1500);
+      }
     } catch (err) {
       setServerError(
-        err instanceof Error ? err.message : "Registration failed. Try again."
+        err instanceof Error ? err.message : "Registration failed. Please try again."
       );
       setIsSubmitting(false);
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    setServerError(`${provider} sign-up is not available in demo mode. Please use email & password.`);
+  const handleGoogleSignUp = () => {
+    if (!GOOGLE_OAUTH_URL) return;
+    window.location.href = GOOGLE_OAUTH_URL;
   };
 
   return (
@@ -105,7 +138,7 @@ export default function RegisterPage() {
             <SuccessAlert
               show={!!successMsg}
               message={successMsg ?? ""}
-              title="Registration successful!"
+              title={isMP ? "Registration submitted!" : "Registration successful!"}
             />
             <ErrorAlert
               show={!!serverError}
@@ -113,22 +146,19 @@ export default function RegisterPage() {
               title="Registration failed"
             />
 
-            <form
-              onSubmit={handleSubmit(onSubmit)}
-              noValidate
-              className="space-y-4"
-            >
-              {/* Role Selector — now includes Admin */}
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+
+              {/* ── Role Selector ─────────────────────────────────────────── */}
               <fieldset>
                 <legend className="mb-2 text-sm font-medium text-slate-300">
                   Account Type
                 </legend>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {roleOptions.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setValue("role", opt.value)}
+                      onClick={() => setValue("role", opt.value, { shouldValidate: true })}
                       aria-pressed={selectedRole === opt.value}
                       className={cn(
                         "flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center",
@@ -139,9 +169,7 @@ export default function RegisterPage() {
                           : "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:border-white/20 hover:text-slate-300"
                       )}
                     >
-                      <span className="text-lg" aria-hidden>
-                        {opt.icon}
-                      </span>
+                      <span className="text-lg" aria-hidden>{opt.icon}</span>
                       <span className="text-xs font-semibold">{opt.label}</span>
                       <span className="text-[10px] opacity-75 leading-tight">{opt.desc}</span>
                     </button>
@@ -154,6 +182,7 @@ export default function RegisterPage() {
                 )}
               </fieldset>
 
+              {/* ── Common Fields ─────────────────────────────────────────── */}
               <Input
                 id="register-name"
                 label="Full Name"
@@ -208,7 +237,83 @@ export default function RegisterPage() {
                 {...register("confirmPassword")}
               />
 
-              {/* Terms */}
+              {/* ── MP-only Fields (animated) ──────────────────────────── */}
+              <AnimatePresence>
+                {isMP && (
+                  <motion.div
+                    key="mp-fields"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-4 pt-1">
+                      {/* Divider */}
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-white/[0.08]" />
+                        <span className="text-[11px] font-medium uppercase tracking-widest text-slate-500">
+                          MP Details
+                        </span>
+                        <div className="h-px flex-1 bg-white/[0.08]" />
+                      </div>
+
+                      <Input
+                        id="register-constituency"
+                        label="Constituency"
+                        type="text"
+                        placeholder="e.g. Varanasi"
+                        leftIcon={<Landmark size={16} />}
+                        error={errors.constituency?.message}
+                        {...register("constituency")}
+                      />
+
+                      <Input
+                        id="register-district"
+                        label="District"
+                        type="text"
+                        placeholder="e.g. Varanasi"
+                        leftIcon={<MapPin size={16} />}
+                        error={errors.district?.message}
+                        {...register("district")}
+                      />
+
+                      <Input
+                        id="register-state"
+                        label="State"
+                        type="text"
+                        placeholder="e.g. Uttar Pradesh"
+                        leftIcon={<Building2 size={16} />}
+                        error={errors.state?.message}
+                        {...register("state")}
+                      />
+
+                      <Input
+                        id="register-party"
+                        label="Political Party"
+                        type="text"
+                        placeholder="e.g. Independent"
+                        leftIcon={<PartyPopper size={16} />}
+                        error={errors.party?.message}
+                        {...register("party")}
+                      />
+
+                      <Input
+                        id="register-mpid"
+                        label="MP ID (Optional)"
+                        type="text"
+                        placeholder="Your official MP identifier"
+                        leftIcon={<BadgeCheck size={16} />}
+                        hint="Leave blank if not assigned yet"
+                        error={errors.mpId?.message}
+                        {...register("mpId")}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* ── Terms ─────────────────────────────────────────────────── */}
               <Checkbox
                 id="register-terms"
                 label={
@@ -238,13 +343,15 @@ export default function RegisterPage() {
               />
 
               <LoadingButton
+                type="submit"
                 isLoading={isSubmitting}
-                loadingText="Creating account…"
+                loadingText={isMP ? "Submitting registration…" : "Creating account…"}
                 size="lg"
                 className="mt-1"
               >
                 <span className="flex items-center gap-2">
-                  Create Account <ArrowRight size={16} />
+                  {isMP ? "Submit MP Registration" : "Create Account"}{" "}
+                  <ArrowRight size={16} />
                 </span>
               </LoadingButton>
             </form>
@@ -254,18 +361,17 @@ export default function RegisterPage() {
               <span>Your data is encrypted and never shared</span>
             </div>
 
-            <Divider label="or sign up with" />
-
-            <div className="space-y-2.5">
-              <SocialLoginButton
-                provider="google"
-                onClick={() => handleSocialLogin("Google")}
-              />
-              <SocialLoginButton
-                provider="aadhaar"
-                onClick={() => handleSocialLogin("Aadhaar")}
-              />
-            </div>
+            {/* Only show Google OAuth for citizens */}
+            {!isMP && (
+              <>
+                <Divider label="or sign up with" />
+                <SocialLoginButton
+                  provider="google"
+                  onClick={handleGoogleSignUp}
+                  disabled={!GOOGLE_OAUTH_URL}
+                />
+              </>
+            )}
           </div>
         </AuthCard>
 

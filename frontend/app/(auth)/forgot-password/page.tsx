@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { Mail, ArrowLeft, ArrowRight, KeyRound } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import AuthLayout from "../../../components/auth/AuthLayout";
 import AuthCard from "../../../components/auth/AuthCard";
@@ -19,14 +18,10 @@ import {
   forgotPasswordSchema,
   type ForgotPasswordSchema,
 } from "../../../lib/validations/auth";
+import { authForgotPassword } from "../../../lib/authStore";
 import { maskEmail } from "../../../utils/auth";
 
-async function sendResetEmail(_email: string): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 1400));
-}
-
 export default function ForgotPasswordPage() {
-  const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
   const [sentEmail, setSentEmail] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,10 +38,9 @@ export default function ForgotPasswordPage() {
     setServerError(null);
     setIsSubmitting(true);
     try {
-      await sendResetEmail(data.email);
+      // POST /auth/forgot-password — backend sends reset email
+      await authForgotPassword(data.email);
       setSentEmail(data.email);
-      // After showing the success state, redirect to OTP/verify-email
-      setTimeout(() => router.push("/verify-otp?type=password-reset"), 3000);
     } catch (err) {
       setServerError(
         err instanceof Error ? err.message : "Could not send reset link. Try again."
@@ -99,10 +93,6 @@ export default function ForgotPasswordPage() {
                   >
                     Try again
                   </button>
-                </p>
-
-                <p className="text-xs text-slate-600" aria-live="polite">
-                  Redirecting to OTP verification in a moment…
                 </p>
               </div>
             ) : (

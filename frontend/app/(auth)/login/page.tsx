@@ -1,12 +1,12 @@
-"use client";
-
-// DEV MODE: All form validation removed. Sign In works with any input including empty fields.
+﻿"use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { Mail, ArrowRight, Shield } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import AuthLayout from "../../../components/auth/AuthLayout";
 import AuthCard from "../../../components/auth/AuthCard";
@@ -18,47 +18,87 @@ import Checkbox from "../../../components/auth/Checkbox";
 import Divider from "../../../components/auth/Divider";
 import SocialLoginButton from "../../../components/auth/SocialLoginButton";
 import LoadingButton from "../../../components/auth/LoadingButton";
-import { SuccessAlert } from "../../../components/auth/Alert";
-import { authLogin } from "../../../lib/authStore";
+import { ErrorAlert, SuccessAlert } from "../../../components/auth/Alert";
+import { loginSchema, type LoginSchema } from "../../../lib/validations/auth";
+import { authLogin, authLoginMP, authLoginAdmin } from "../../../lib/authStore";
+import { cn } from "../../../utils/auth";
+
+const GOOGLE_OAUTH_URL = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_URL ?? "";
+
+// ── Login role selector options ───────────────────────────────────────────────
+const loginRoles: {
+  value: "citizen" | "mp" | "admin";
+  label: string;
+  icon: string;
+}[] = [
+  { value: "citizen", label: "Citizen", icon: "🏠" },
+  { value: "mp",      label: "MP / MLA", icon: "🏛️" },
+  { value: "admin",   label: "Admin",  icon: "⚙️" },
+];
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [successMsg,   setSuccessMsg]   = useState<string | null>(null);
+  const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Resolve redirect destination from ?next param (dev bypass)
-  const nextParam = searchParams.get("next");
-  const redirectTo: string =
-    nextParam === "/citizen" ? "/citizen/dashboard"
-    : nextParam === "/mp"     ? "/mp/dashboard"
-    : nextParam === "/admin"  ? "/admin/dashboard"
-    : "/citizen/dashboard";
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<LoginSchema>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      identifier: "",
+      password:   "",
+      rememberMe: false,
+      loginRole:  "citizen",
+    },
+  });
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const selectedRole = watch("loginRole");
+
+  const onSubmit = async (data: LoginSchema) => {
     if (isSubmitting) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
     setIsSubmitting(true);
-    // DEV MODE: no validation, no credential check — immediately log in
-    const user = await authLogin(identifier, password, redirectTo);
-    setSuccessMsg(`Welcome, ${user.fullName.split(" ")[0]}! Redirecting…`);
-    setTimeout(() => router.push(user.redirectTo), 600);
+
+    try {
+      let session;
+
+      switch (data.loginRole) {
+        case "mp":
+          session = await authLoginMP(data.identifier.trim(), data.password);
+          break;
+        case "admin":
+          session = await authLoginAdmin(data.identifier.trim(), data.password);
+          break;
+        default:
+          session = await authLogin(data.identifier.trim(), data.password);
+      }
+
+      setSuccessMsg(`Welcome, ${session.fullName.split(" ")[0]}! Redirecting…`);
+      setTimeout(() => router.push(session.redirectTo), 600);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Login failed. Please try again."
+      );
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    // Placeholder — no OAuth in frontend-only mode
-    void provider;
-    router.push(redirectTo);
+  const handleGoogleLogin = () => {
+    if (!GOOGLE_OAUTH_URL) return;
+    window.location.href = GOOGLE_OAUTH_URL;
   };
 
   return (
     <AuthLayout>
       <div className="space-y-6">
-        {/* Logo (mobile only — panel shows on desktop) */}
+        {/* Logo (mobile only) */}
         <div className="lg:hidden">
           <AuthLogo size="md" />
         </div>
@@ -76,21 +116,54 @@ export default function LoginPage() {
               message={successMsg ?? ""}
               title="Signed in!"
             />
+            <ErrorAlert
+              show={!!errorMsg}
+              message={errorMsg ?? ""}
+              title="Sign in failed"
+            />
 
-            <form
-              onSubmit={handleSignIn}
-              noValidate
-              className="space-y-4"
-            >
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+
+              {/* ── Login Role Selector ──────────────────────────────────── */}
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium text-slate-300">
+                  I am a…
+                </legend>
+                <div className="grid grid-cols-3 gap-2">
+                  {loginRoles.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        setValue("loginRole", opt.value, { shouldValidate: true })
+                      }
+                      aria-pressed={selectedRole === opt.value}
+                      className={cn(
+                        "flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center",
+                        "transition-all duration-200 outline-none",
+                        "focus-visible:ring-2 focus-visible:ring-blue-500/60",
+                        selectedRole === opt.value
+                          ? "border-blue-500/60 bg-blue-500/10 text-white"
+                          : "border-white/[0.08] bg-white/[0.04] text-slate-400 hover:border-white/20 hover:text-slate-300"
+                      )}
+                    >
+                      <span className="text-base" aria-hidden>{opt.icon}</span>
+                      <span className="text-[11px] font-semibold">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {/* ── Credentials ───────────────────────────────────────────── */}
               <Input
                 id="login-identifier"
-                label="Email or Phone"
-                type="text"
+                label="Email"
+                type="email"
                 autoComplete="username"
-                placeholder="you@example.com or 9876543210"
+                placeholder="you@example.com"
                 leftIcon={<Mail size={16} />}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                error={errors.identifier?.message}
+                {...register("identifier")}
               />
 
               <div className="space-y-1.5">
@@ -99,8 +172,8 @@ export default function LoginPage() {
                   label="Password"
                   autoComplete="current-password"
                   placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  error={errors.password?.message}
+                  {...register("password")}
                 />
               </div>
 
@@ -108,8 +181,7 @@ export default function LoginPage() {
                 <Checkbox
                   id="login-remember"
                   label="Remember me"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  {...register("rememberMe")}
                 />
                 <Link
                   href="/forgot-password"
@@ -120,6 +192,7 @@ export default function LoginPage() {
               </div>
 
               <LoadingButton
+                type="submit"
                 isLoading={isSubmitting}
                 loadingText="Signing in…"
                 size="lg"
@@ -131,32 +204,23 @@ export default function LoginPage() {
               </LoadingButton>
             </form>
 
-            {/* Demo hint */}
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.06] px-4 py-3 text-xs text-slate-400">
-              <p className="mb-1 font-semibold text-blue-300">Demo credentials</p>
-              <p>Admin: <span className="font-mono text-slate-300">admin@janmitra.ai / Admin@123</span></p>
-              <p>MP: <span className="font-mono text-slate-300">mp@janmitra.ai / Mp@123</span></p>
-              <p>Citizen: <span className="font-mono text-slate-300">citizen@janmitra.ai / Citizen@123</span></p>
-            </div>
-
             {/* Security badge */}
             <div className="flex items-center justify-center gap-2 text-xs text-slate-600">
               <Shield size={12} aria-hidden />
               <span>Secured with 256-bit AES encryption</span>
             </div>
 
-            <Divider label="or continue with" />
-
-            <div className="space-y-2.5">
-              <SocialLoginButton
-                provider="google"
-                onClick={() => handleSocialLogin("Google")}
-              />
-              <SocialLoginButton
-                provider="aadhaar"
-                onClick={() => handleSocialLogin("Aadhaar")}
-              />
-            </div>
+            {/* Google OAuth — only shown for Citizens */}
+            {selectedRole === "citizen" && (
+              <>
+                <Divider label="or continue with" />
+                <SocialLoginButton
+                  provider="google"
+                  onClick={handleGoogleLogin}
+                  disabled={!GOOGLE_OAUTH_URL}
+                />
+              </>
+            )}
           </div>
         </AuthCard>
 

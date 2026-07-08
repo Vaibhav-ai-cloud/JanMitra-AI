@@ -1,31 +1,41 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { forwardRef } from "react";
 import type { InputHTMLAttributes } from "react";
 import { Check } from "lucide-react";
 import { cn } from "../../utils/auth";
 
 interface CheckboxProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
-  label: React.ReactNode;
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className"> {
+  label: ReactNode;
   error?: string;
   id: string;
+  wrapperClassName?: string;
 }
 
 const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ label, error, id, className, ...props }, ref) => {
+  ({ label, error, id, wrapperClassName, ...props }, ref) => {
     return (
-      <div className={cn("flex flex-col gap-1", className)}>
+      <div className={cn("flex flex-col gap-1", wrapperClassName)}>
         <div className="flex items-start gap-3">
           <div className="relative mt-0.5 shrink-0">
+            {/* 
+              IMPORTANT: type="checkbox" MUST come AFTER {...props} spread so it
+              cannot be overridden. React Hook Form's register() does not return type,
+              but we enforce it here defensively.
+              
+              The ref is forwarded so RHF can register the checkbox input.
+              RHF reads e.target.checked (boolean) because element.type === 'checkbox'.
+            */}
             <input
               ref={ref}
               id={id}
-              type="checkbox"
               aria-invalid={!!error}
               aria-describedby={error ? `${id}-error` : undefined}
               className="peer sr-only"
               {...props}
+              type="checkbox"
             />
             <label
               htmlFor={id}

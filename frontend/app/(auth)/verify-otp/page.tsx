@@ -18,14 +18,7 @@ import { ErrorAlert } from "../../../components/auth/Alert";
 import { otpSchema, type OtpSchema } from "../../../lib/validations/auth";
 import { useCountdown } from "../../../hooks/useCountdown";
 import { formatCountdown } from "../../../utils/auth";
-
-async function verifyOtp(_otp: string): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-}
-
-async function resendOtp(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-}
+import api, { getApiErrorMessage } from "../../../services/api";
 
 const RESEND_COOLDOWN = 60;
 
@@ -58,7 +51,8 @@ function OtpForm() {
     setServerError(null);
     setIsSubmitting(true);
     try {
-      await verifyOtp(data.otp);
+      // POST /auth/verify-otp — backend verifies OTP
+      await api.post("/auth/verify-otp", { otp: data.otp, type });
       // Route based on what flow triggered OTP
       if (type === "password-reset") {
         router.push("/reset-password");
@@ -67,7 +61,7 @@ function OtpForm() {
       }
     } catch (err) {
       setServerError(
-        err instanceof Error ? err.message : "Invalid OTP. Please try again."
+        getApiErrorMessage(err, "Invalid OTP. Please try again.")
       );
       setIsSubmitting(false);
     }
@@ -77,10 +71,13 @@ function OtpForm() {
     setServerError(null);
     setIsResending(true);
     try {
-      await resendOtp();
+      // POST /auth/resend-otp — backend resends OTP
+      await api.post("/auth/resend-otp", { type });
       start();
-    } catch {
-      setServerError("Could not resend OTP. Please try again.");
+    } catch (err) {
+      setServerError(
+        getApiErrorMessage(err, "Could not resend OTP. Please try again.")
+      );
     } finally {
       setIsResending(false);
     }

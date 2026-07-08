@@ -1,13 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import AuthLogo from "./AuthLogo";
 import { cn } from "../../utils/auth";
 
 interface AuthLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
   /** Optional panel content (shown on large screens) */
-  panel?: React.ReactNode;
+  panel?: ReactNode;
   className?: string;
 }
 
@@ -37,7 +38,7 @@ function AuthBackground() {
 }
 
 /** Left panel with branding for large screens */
-function BrandPanel({ content }: { content?: React.ReactNode }) {
+function BrandPanel({ content }: { content?: ReactNode }) {
   return (
     <motion.aside
       initial={{ opacity: 0, x: -24 }}

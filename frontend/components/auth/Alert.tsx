@@ -1,5 +1,6 @@
 "use client";
 
+import type { ElementType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, AlertCircle, Info } from "lucide-react";
 import { cn } from "../../utils/auth";
@@ -17,7 +18,7 @@ interface AlertProps {
 const config: Record<
   AlertVariant,
   {
-    icon: React.ElementType;
+    icon: ElementType;
     bg: string;
     border: string;
     text: string;

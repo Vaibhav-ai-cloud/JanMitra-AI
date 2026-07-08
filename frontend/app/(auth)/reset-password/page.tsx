@@ -19,15 +19,7 @@ import {
   resetPasswordSchema,
   type ResetPasswordSchema,
 } from "../../../lib/validations/auth";
-
-// Simulated API — replace with actual endpoint using token from URL
-async function resetPassword(
-  _data: ResetPasswordSchema,
-  _token: string | null
-): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  // Real implementation: POST /api/auth/reset-password { token, newPassword }
-}
+import { authResetPassword } from "../../../lib/authStore";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -49,10 +41,16 @@ function ResetPasswordForm() {
   const password = watch("password") ?? "";
 
   const onSubmit = async (data: ResetPasswordSchema) => {
+    if (!token) {
+      setServerError("No reset token found. Please use the link from your email.");
+      return;
+    }
+
     setServerError(null);
     setIsSubmitting(true);
     try {
-      await resetPassword(data, token);
+      // POST /auth/reset-password — backend validates token and updates password
+      await authResetPassword(token, data.password);
       router.push("/auth-success?type=password-reset");
     } catch (err) {
       setServerError(

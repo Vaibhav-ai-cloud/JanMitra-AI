@@ -4,7 +4,6 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, ArrowRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import AuthLayout from "../../../components/auth/AuthLayout";
 import AuthCard from "../../../components/auth/AuthCard";
@@ -12,13 +11,9 @@ import AuthHeader from "../../../components/auth/AuthHeader";
 import AuthLogo from "../../../components/auth/AuthLogo";
 import LoadingButton from "../../../components/auth/LoadingButton";
 import { ErrorAlert, SuccessAlert } from "../../../components/auth/Alert";
-
-async function resendVerificationEmail(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-}
+import api, { getApiErrorMessage } from "../../../services/api";
 
 export default function EmailVerifyPage() {
-  const router = useRouter();
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +23,12 @@ export default function EmailVerifyPage() {
     setSent(false);
     setIsSending(true);
     try {
-      await resendVerificationEmail();
+      // POST /auth/resend-verification — backend resends the email verification link
+      await api.post("/auth/resend-verification");
       setSent(true);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not resend email. Try again."
+        getApiErrorMessage(err, "Could not resend email. Try again.")
       );
     } finally {
       setIsSending(false);

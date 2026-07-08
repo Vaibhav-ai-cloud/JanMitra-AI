@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getSession } from "../../lib/authStore";
@@ -8,18 +9,24 @@ import type { UserRole } from "../../types/auth";
 interface AuthGuardProps {
   /** Which role must be logged in to access this area */
   requiredRole: UserRole;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
+const ROLE_REDIRECT: Record<UserRole, string> = {
+  citizen: "/citizen/dashboard",
+  mp: "/mp/dashboard",
+  admin: "/admin/dashboard",
+};
+
 /**
- * Client-side route protection using LocalStorage session.
+ * Client-side route protection using the JWT session stored in localStorage.
  *
  * If not logged in → redirect to /login
  * If logged in with wrong role → redirect to the correct dashboard
  * If logged in with correct role → render children
  */
 export default function AuthGuard({ requiredRole, children }: AuthGuardProps) {
-  const router   = useRouter();
+  const router = useRouter();
   const pathname = usePathname();
   const [allowed, setAllowed] = useState(false);
 
@@ -27,14 +34,14 @@ export default function AuthGuard({ requiredRole, children }: AuthGuardProps) {
     const session = getSession();
 
     if (!session) {
-      // Not logged in → send to login with return URL
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      // Not logged in → send to login
+      router.replace(`/login`);
       return;
     }
 
     if (session.role !== requiredRole) {
       // Logged in but wrong role → redirect to their own dashboard
-      router.replace(session.redirectTo);
+      router.replace(ROLE_REDIRECT[session.role] ?? "/login");
       return;
     }
 
@@ -42,7 +49,6 @@ export default function AuthGuard({ requiredRole, children }: AuthGuardProps) {
   }, [pathname, requiredRole, router]);
 
   if (!allowed) {
-    // Show nothing (or a spinner) while the redirect check runs
     return (
       <div
         className="flex min-h-screen items-center justify-center bg-[#080e1c]"

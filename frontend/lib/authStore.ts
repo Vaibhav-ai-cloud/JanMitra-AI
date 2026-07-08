@@ -1,202 +1,244 @@
-/**
+﻿/**
  * lib/authStore.ts
  *
- * Frontend-only authentication using LocalStorage.
- * No backend · No API · No database.
+ * Production authentication via FastAPI backend.
  *
- * Storage keys:
- *   janmitra_users   — array of all registered accounts
- *   janmitra_session — the currently logged-in user
+ * Registration endpoints:
+ *   POST /auth/register        — citizen registration
+ *   POST /auth/mp/register     — MP registration (returns pending status)
+ *
+ * Login endpoints:
+ *   POST /auth/login           — citizen login (generic / backward-compat)
+ *   POST /auth/mp/login        — MP login (status-gated by backend)
+ *   POST /auth/admin/login     — admin login
+ *
+ * Other:
+ *   POST /auth/forgot-password — request reset link
+ *   POST /auth/reset-password  — complete password reset
+ *   GET  /auth/me              — restore session from token
+ *
+ * Session is persisted in localStorage under SESSION_KEY.
+ * No mock, demo, or hardcoded users — production only.
  */
 
+import api, { getApiErrorMessage } from "../services/api";
 import type { UserRole } from "../types/auth";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface StoredUser {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  passwordHash: string; // stored as-is (plain, frontend-only demo)
-  role: UserRole;
-  createdAt: string;
-}
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SessionUser {
-  id: string;
+  id: number;
   fullName: string;
   email: string;
-  phone: string;
   role: UserRole;
+  accessToken: string;
   redirectTo: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const USERS_KEY = "janmitra_users";
 const SESSION_KEY = "janmitra_session";
 
 const ROLE_REDIRECT: Record<UserRole, string> = {
   citizen: "/citizen/dashboard",
-  mp: "/mp/dashboard",
-  admin: "/admin/dashboard",
+  mp:      "/mp/dashboard",
+  admin:   "/admin/dashboard",
 };
 
-// ── Seed demo accounts (run once on module load) ──────────────────────────────
-
-const DEMO_USERS: StoredUser[] = [
-  {
-    id: "demo-admin",
-    fullName: "Admin User",
-    email: "admin@janmitra.ai",
-    phone: "9000000001",
-    passwordHash: "Admin@123",
-    role: "admin",
-    createdAt: "2026-01-01T00:00:00.000Z",
-  },
-  {
-    id: "demo-mp",
-    fullName: "MP User",
-    email: "mp@janmitra.ai",
-    phone: "9000000002",
-    passwordHash: "Mp@123",
-    role: "mp",
-    createdAt: "2026-01-01T00:00:00.000Z",
-  },
-  {
-    id: "demo-citizen",
-    fullName: "Citizen User",
-    email: "citizen@janmitra.ai",
-    phone: "9000000003",
-    passwordHash: "Citizen@123",
-    role: "citizen",
-    createdAt: "2026-01-01T00:00:00.000Z",
-  },
-];
-
-function seedDemoAccounts(): void {
-  if (typeof window === "undefined") return;
-  try {
-    const existing = localStorage.getItem(USERS_KEY);
-    if (!existing) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(DEMO_USERS));
-    } else {
-      // Merge: add any demo user whose email is not yet present
-      const users: StoredUser[] = JSON.parse(existing);
-      const emails = new Set(users.map((u) => u.email));
-      const merged = [
-        ...users,
-        ...DEMO_USERS.filter((d) => !emails.has(d.email)),
-      ];
-      if (merged.length !== users.length) {
-        localStorage.setItem(USERS_KEY, JSON.stringify(merged));
-      }
-    }
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-function getUsers(): StoredUser[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    return raw ? (JSON.parse(raw) as StoredUser[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users: StoredUser[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-function generateId(): string {
-  return `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Citizen Registration ──────────────────────────────────────────────────────
 
 /**
- * Register a new account.
- * Throws if the email is already taken.
+ * Register a new citizen account via POST /auth/register.
+ * Admin registration is blocked by the backend (HTTP 403).
  */
-export async function authRegister(data: {
+export async function authRegisterCitizen(data: {
   fullName: string;
   email: string;
   phone: string;
   password: string;
-  role: UserRole;
 }): Promise<void> {
-  seedDemoAccounts();
-  // Simulate latency
-  await new Promise((resolve) => setTimeout(resolve, 800));
-
-  const users = getUsers();
-  const normalised = data.email.trim().toLowerCase();
-
-  if (users.some((u) => u.email === normalised)) {
+  try {
+    await api.post("/auth/register", {
+      full_name: data.fullName,
+      email:     data.email,
+      phone:     data.phone,
+      password:  data.password,
+      role:      "citizen",
+    });
+  } catch (err) {
     throw new Error(
-      "An account with this email already exists. Please sign in instead."
+      getApiErrorMessage(err, "Registration failed. Please try again.")
     );
   }
+}
 
-  const newUser: StoredUser = {
-    id: generateId(),
-    fullName: data.fullName.trim(),
-    email: normalised,
-    phone: data.phone.trim(),
-    passwordHash: data.password, // plain — frontend demo only
-    role: data.role,
-    createdAt: new Date().toISOString(),
-  };
+// ── MP Registration ───────────────────────────────────────────────────────────
 
-  saveUsers([...users, newUser]);
+/**
+ * Register a new MP account via POST /auth/mp/register.
+ * Backend sets status = "pending" — admin must approve before login.
+ */
+export async function authRegisterMP(data: {
+  fullName:     string;
+  email:        string;
+  phone:        string;
+  password:     string;
+  constituency: string;
+  district:     string;
+  state:        string;
+  party:        string;
+  mpId?:        string;
+}): Promise<void> {
+  try {
+    await api.post("/auth/mp/register", {
+      full_name:    data.fullName,
+      email:        data.email,
+      phone:        data.phone,
+      password:     data.password,
+      constituency: data.constituency,
+      district:     data.district,
+      state:        data.state,
+      party:        data.party,
+      mp_id:        data.mpId ?? undefined,
+    });
+  } catch (err) {
+    throw new Error(
+      getApiErrorMessage(err, "MP registration failed. Please try again.")
+    );
+  }
 }
 
 /**
- * DEV-MODE: Log in without credential validation.
- * Accepts an optional redirectTo to route based on the ?next URL param.
- * Maps the destination to a named dev persona with the correct role.
- * Falls back to Demo Citizen / /citizen/dashboard if no redirectTo is provided.
+ * Backward-compat alias. New code should call authRegisterCitizen or authRegisterMP directly.
+ */
+export async function authRegister(data: {
+  fullName: string;
+  email:    string;
+  phone:    string;
+  password: string;
+  role:     "citizen" | "mp";
+}): Promise<void> {
+  if (data.role === "mp") {
+    throw new Error(
+      "Use authRegisterMP() for MP registration — additional fields required."
+    );
+  }
+  return authRegisterCitizen(data);
+}
+
+// ── Citizen / Generic Login ───────────────────────────────────────────────────
+
+/**
+ * Log in via POST /auth/login (citizen / generic endpoint).
+ * Persists session to localStorage automatically.
  */
 export async function authLogin(
-  _email: string,
-  _password: string,
-  redirectTo?: string
+  email:    string,
+  password: string
 ): Promise<SessionUser> {
-  // Simulate a brief loading state so the UI still feels responsive
-  await new Promise((resolve) => setTimeout(resolve, 400));
-
-  const destination = redirectTo ?? "/citizen/dashboard";
-
-  // Pick a named dev persona that matches the destination
-  type DevPersona = { id: string; fullName: string; email: string; phone: string; role: UserRole };
-
-  const persona: DevPersona = destination.includes("/admin")
-    ? { id: "dev-admin",   fullName: "Demo Administrator", email: "admin@janmitra.ai", phone: "9000000001", role: "admin"   }
-    : destination.includes("/mp")
-    ? { id: "dev-mp",      fullName: "Demo MP",            email: "mp@janmitra.ai",    phone: "9000000002", role: "mp"      }
-    : { id: "dev-citizen", fullName: "Demo Citizen",       email: "citizen@janmitra.ai", phone: "9000000003", role: "citizen" };
-
-  const session: SessionUser = {
-    ...persona,
-    redirectTo: destination,
-  };
-
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  }
-  return session;
+  return _doLogin("/auth/login", email, password);
 }
 
+// ── MP Login ─────────────────────────────────────────────────────────────────
+
 /**
- * Return the current session, or null if not logged in.
+ * Log in via POST /auth/mp/login.
+ * Backend returns HTTP 403 if account is pending or rejected.
  */
+export async function authLoginMP(
+  email:    string,
+  password: string
+): Promise<SessionUser> {
+  return _doLogin("/auth/mp/login", email, password);
+}
+
+// ── Admin Login ───────────────────────────────────────────────────────────────
+
+/**
+ * Log in via POST /auth/admin/login.
+ * No self-registration — admin accounts created manually in DB.
+ */
+export async function authLoginAdmin(
+  email:    string,
+  password: string
+): Promise<SessionUser> {
+  return _doLogin("/auth/admin/login", email, password);
+}
+
+// ── Shared login helper ───────────────────────────────────────────────────────
+
+async function _doLogin(
+  endpoint: string,
+  email:    string,
+  password: string
+): Promise<SessionUser> {
+  try {
+    const { data } = await api.post<{
+      access_token: string;
+      token_type:   string;
+      user: {
+        id:        number;
+        full_name: string;
+        email:     string;
+        role:      string;
+      };
+    }>(endpoint, { email, password });
+
+    const role = data.user.role as UserRole;
+
+    const session: SessionUser = {
+      id:          data.user.id,
+      fullName:    data.user.full_name,
+      email:       data.user.email,
+      role,
+      accessToken: data.access_token,
+      redirectTo:  ROLE_REDIRECT[role] ?? "/citizen/dashboard",
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    }
+
+    return session;
+  } catch (err) {
+    throw new Error(
+      getApiErrorMessage(err, "Invalid email or password.")
+    );
+  }
+}
+
+// ── Forgot Password ───────────────────────────────────────────────────────────
+
+export async function authForgotPassword(email: string): Promise<void> {
+  try {
+    await api.post("/auth/forgot-password", { email });
+  } catch (err) {
+    throw new Error(
+      getApiErrorMessage(err, "Could not send reset link. Please try again.")
+    );
+  }
+}
+
+// ── Reset Password ────────────────────────────────────────────────────────────
+
+export async function authResetPassword(
+  token:       string,
+  newPassword: string
+): Promise<void> {
+  try {
+    await api.post("/auth/reset-password", {
+      token,
+      new_password: newPassword,
+    });
+  } catch (err) {
+    throw new Error(
+      getApiErrorMessage(err, "Failed to reset password. The link may have expired.")
+    );
+  }
+}
+
+// ── Session Helpers ───────────────────────────────────────────────────────────
+
 export function getSession(): SessionUser | null {
   if (typeof window === "undefined") return null;
   try {
@@ -207,17 +249,49 @@ export function getSession(): SessionUser | null {
   }
 }
 
-/**
- * Log out — clears the session from LocalStorage.
- */
 export function authLogout(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SESSION_KEY);
 }
 
-/**
- * Returns true if a session exists in LocalStorage.
- */
 export function isLoggedIn(): boolean {
   return getSession() !== null;
+}
+
+export function getAccessToken(): string | null {
+  return getSession()?.accessToken ?? null;
+}
+
+export async function restoreSession(): Promise<SessionUser | null> {
+  const session = getSession();
+  if (!session) return null;
+
+  try {
+    const { data } = await api.get<{
+      id:        number;
+      full_name: string;
+      email:     string;
+      role:      string;
+    }>("/auth/me");
+
+    const role = data.role as UserRole;
+
+    const refreshed: SessionUser = {
+      id:          data.id,
+      fullName:    data.full_name,
+      email:       data.email,
+      role,
+      accessToken: session.accessToken,
+      redirectTo:  ROLE_REDIRECT[role] ?? "/citizen/dashboard",
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(refreshed));
+    }
+
+    return refreshed;
+  } catch {
+    authLogout();
+    return null;
+  }
 }

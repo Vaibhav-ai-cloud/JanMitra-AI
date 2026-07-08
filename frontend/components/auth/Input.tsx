@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { forwardRef } from "react";
 import type { InputHTMLAttributes } from "react";
 import { cn } from "../../utils/auth";
@@ -8,8 +9,8 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   hint?: string;
-  leftIcon?: React.ReactNode;
-  rightElement?: React.ReactNode;
+  leftIcon?: ReactNode;
+  rightElement?: ReactNode;
   wrapperClassName?: string;
 }
 
