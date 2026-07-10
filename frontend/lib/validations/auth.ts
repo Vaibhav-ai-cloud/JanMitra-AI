@@ -30,7 +30,7 @@ export const loginSchema = z.object({
   // citizen → POST /auth/login
   // mp      → POST /auth/mp/login
   // admin   → POST /auth/admin/login
-  loginRole: z.enum(["citizen", "mp", "admin"]).default("citizen"),
+  loginRole: z.enum(["citizen", "mp", "admin"]),
 });
 
 export type LoginSchema = z.infer<typeof loginSchema>;
